@@ -8,6 +8,7 @@ function App() {
   const cameraRef = useRef(null);
   const timerRef = useRef(null);
 
+  // For hand gesture detection
   const handVideoRef = useRef(null);
   const handsRef = useRef(null);
   const handCameraRef = useRef(null);
@@ -21,7 +22,6 @@ function App() {
   const [videoVisible, setVideoVisible] = useState(false);
 
   const [showRickVideo, setShowRickVideo] = useState(false);
-  const [showHandStopMessage, setShowHandStopMessage] = useState(false);
   const [stopGestureDetected, setStopGestureDetected] = useState(false);
 
   // Load lose sound effect
@@ -29,7 +29,7 @@ function App() {
     loseAudioRef.current = new window.Audio(process.env.PUBLIC_URL + '/lose.mp3');
   }, []);
 
-  // Calculate Eye Aspect Ratio (EAR) for blink detection
+  // ----- BLINK DETECTION -----
   const calculateEAR = (landmarks, eyeIndices) => {
     const dist = (i1, i2) => {
       const dx = landmarks[i1].x - landmarks[i2].x;
@@ -42,13 +42,11 @@ function App() {
     return (A + B) / (2.0 * C);
   };
 
-  // Blink detection callback
   const onFaceMeshResults = (results) => {
     const ctx = canvasRef.current.getContext('2d');
     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
     if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
       return;
     }
 
@@ -72,17 +70,19 @@ function App() {
       stopMediaPipeCamera();
 
       setShowRickVideo(true);
-      setShowHandStopMessage(true);
       setStopGestureDetected(false);
 
       startHandGestureDetection();
     }
   };
 
-  // Hand gesture detection helper: open palm with fingers extended (simple heuristic)
+  // ----- HAND GESTURE DETECTION -----
+  
+  // Improved open palm/stop sign detection for both hands
   const isStopHandGesture = (handedness, landmarks) => {
-    if (landmarks.length !== 21) return false;
+    if (!landmarks || landmarks.length !== 21) return false;
 
+    // For index, middle, ring, pinky fingers: tip.y < pip.y
     function isFingerExtended(tipIdx, pipIdx) {
       return landmarks[tipIdx].y < landmarks[pipIdx].y;
     }
@@ -93,26 +93,33 @@ function App() {
       isFingerExtended(16, 14) &&
       isFingerExtended(20, 18);
 
-    // Thumb heuristic (adjust or remove if unreliable)
-    const thumbExtended = landmarks[4].x < landmarks[3].x;
+    // Thumb direction: different for left/right hands (facing webcam, hands up)
+    let thumbExtended = true;
+    if (handedness === 'Left') {
+      // Left hand: thumb tip left of joint (x is smaller)
+      thumbExtended = landmarks[4].x < landmarks[3].x;
+    } else if (handedness === 'Right') {
+      // Right hand: thumb tip right of joint (x is greater)
+      thumbExtended = landmarks[4].x > landmarks[3].x;
+    }
 
+    // To be robust, consider allowing stop sign with or without thumb extension:
+    // return fingersExtended;
     return fingersExtended && thumbExtended;
   };
 
-  // Hand gesture detection callback
   const onHandsResults = (results) => {
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       for (let i = 0; i < results.multiHandLandmarks.length; i++) {
         const landmarks = results.multiHandLandmarks[i];
-        const handedness = results.multiHandedness[i]?.label;
+        const handedness = (results.multiHandedness && results.multiHandedness[i] && results.multiHandedness[i].label) || 'Right';
 
         if (isStopHandGesture(handedness, landmarks)) {
           setStopGestureDetected(true);
           setShowRickVideo(false);
-          setShowHandStopMessage(false);
 
           setBlinkDetected(false);
-          setStatus('Stop sign detected. You can restart the game now.');
+          setStatus('Stop sign detected! You can restart the game now.');
           stopHandGestureDetection();
           return;
         }
@@ -121,7 +128,8 @@ function App() {
     setStopGestureDetected(false);
   };
 
-  // FaceMesh camera start and stop
+  // ----- CAMERA / LIFECYCLE -----
+
   const startMediaPipeCamera = () => {
     try {
       if (cameraRef.current) {
@@ -146,13 +154,24 @@ function App() {
     }
   };
 
-  // Hand gesture camera start and stop
-  const startHandGestureDetection = () => {
+  const startHandGestureDetection = async () => {
+    // Start or reuse hand detection webcam stream
     if (handCameraRef.current) {
       handCameraRef.current.start();
       return;
     }
     if (!handVideoRef.current || !handsRef.current) return;
+
+    // Prefer getting a new video stream if not already attached
+    if (!handVideoRef.current.srcObject) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        handVideoRef.current.srcObject = stream;
+      } catch (err) {
+        setStatus('Error accessing webcam for gesture detection: ' + err.message);
+        return;
+      }
+    }
 
     handCameraRef.current = new window.Camera(handVideoRef.current, {
       onFrame: async () => {
@@ -171,16 +190,19 @@ function App() {
       handCameraRef.current.stop();
       handCameraRef.current = null;
     }
+    // Stop the webcam stream for gesture detection
+    if (handVideoRef.current && handVideoRef.current.srcObject) {
+      handVideoRef.current.srcObject.getTracks().forEach(t => t.stop());
+      handVideoRef.current.srcObject = null;
+    }
   };
 
-  // Clear canvas helper
   const drawResults = (img) => {
     const ctx = canvasRef.current.getContext('2d');
     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     if (img) ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
   };
 
-  // Timer start/stop
   const startTimer = () => {
     setTime(0);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -194,7 +216,6 @@ function App() {
     }
   };
 
-  // Webcam start/stop
   const startWebcamStream = async () => {
     try {
       if (!videoRef.current.srcObject) {
@@ -215,7 +236,7 @@ function App() {
     setVideoVisible(false);
   };
 
-  // On mount init FaceMesh and Hands
+  // --- INIT ON MOUNT ---
   useEffect(() => {
     faceMeshRef.current = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
@@ -228,6 +249,7 @@ function App() {
     });
     faceMeshRef.current.onResults(onFaceMeshResults);
 
+    // Use window.Hands (from CDN) for hand gesture detection
     handsRef.current = new window.Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
@@ -246,14 +268,13 @@ function App() {
       stopWebcamStream();
       faceMeshRef.current?.close();
       faceMeshRef.current = null;
-      if (handsRef.current) {
-        handsRef.current.close();
-        handsRef.current = null;
-      }
+      if (handsRef.current) handsRef.current.close();
+      handsRef.current = null;
     };
+    // eslint-disable-next-line
   }, []);
 
-  // Countdown before game start
+  // --- COUNTDOWN & GAME START/RESTART ---
   const startCountdown = () => {
     setCountdown(3);
     let counter = 3;
@@ -270,19 +291,16 @@ function App() {
     }, 1000);
   };
 
-  // Start game
   const startGame = async () => {
     setBlinkDetected(false);
     setStopGestureDetected(false);
     setStatus('Getting webcam ready...');
     setShowRickVideo(false);
-    setShowHandStopMessage(false);
     setTime(0);
     await startWebcamStream();
     startCountdown();
   };
 
-  // Restart game
   const restartGame = () => {
     stopTimer();
     stopMediaPipeCamera();
@@ -293,9 +311,10 @@ function App() {
     setTime(0);
     setCountdown(0);
     setShowRickVideo(false);
-    setShowHandStopMessage(false);
     setStopGestureDetected(false);
   };
+
+  // --- RENDER ---
 
   return (
     <div style={{
@@ -465,14 +484,13 @@ function App() {
             loop
             playsInline
             controls={false}
-            muted={false}
           />
           <div style={{
             position: 'absolute',
             top: 20,
             width: '100%',
             color: 'white',
-            fontSize: 24,
+            fontSize: 28,
             textAlign: 'center',
             fontWeight: 'bold',
             userSelect: 'none',
@@ -491,7 +509,6 @@ function App() {
           />
         </div>
       )}
-
     </div>
   );
 }
