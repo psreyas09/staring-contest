@@ -15,7 +15,6 @@ function App() {
   const [countdown, setCountdown] = useState(0);
   const [videoVisible, setVideoVisible] = useState(false);
 
-  // New states for Rick video and hand sign overlays
   const [showRickVideo, setShowRickVideo] = useState(false);
   const [showHandSign, setShowHandSign] = useState(false);
 
@@ -345,14 +344,31 @@ function App() {
           <video
             src={`${process.env.PUBLIC_URL}/rick.mp4`}
             autoPlay
-            muted
-            loop
+            controls
             style={{ maxWidth: '90%', maxHeight: '80%', borderRadius: 20, boxShadow: '0 0 20px rgba(255,255,255,0.6)' }}
             onEnded={() => {
               setShowRickVideo(false);
               setShowHandSign(true);
             }}
           />
+          <button
+            onClick={() => {
+              setShowRickVideo(false);
+              setShowHandSign(true);
+            }}
+            style={{
+              marginTop: 20,
+              padding: '8px 20px',
+              fontSize: 16,
+              cursor: 'pointer',
+              borderRadius: 10,
+              border: 'none',
+              backgroundColor: '#007bff',
+              color: 'white',
+            }}
+          >
+            Skip Video
+          </button>
         </div>
       )}
 
