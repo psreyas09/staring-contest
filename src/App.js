@@ -8,11 +8,19 @@ function App() {
   const cameraRef = useRef(null);
   const timerRef = useRef(null);
 
+  // 1. Audio ref for sound effect
+  const loseAudioRef = useRef(null);
+
   const [status, setStatus] = useState('Click Start to begin the staring contest');
   const [blinkDetected, setBlinkDetected] = useState(false);
   const [time, setTime] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [videoVisible, setVideoVisible] = useState(false);
+
+  // 2. Load audio file on mount
+  useEffect(() => {
+    loseAudioRef.current = new window.Audio(process.env.PUBLIC_URL + '/lose.mp3');
+  }, []);
 
   const calculateEAR = (landmarks, eyeIndices) => {
     const dist = (i1, i2) => {
@@ -41,8 +49,14 @@ function App() {
     const rightEAR = calculateEAR(landmarks, rightEyeIndices);
     const ear = (leftEAR + rightEAR) / 2;
     const BLINK_THRESHOLD = 0.25;
+
     if (ear < BLINK_THRESHOLD) {
       if (!blinkDetected) {
+        // 3. Play lose sound effect when blink detected!
+        if (loseAudioRef.current) {
+          loseAudioRef.current.currentTime = 0;
+          loseAudioRef.current.play();
+        }
         setBlinkDetected(true);
         setStatus('Blink detected! You lose!');
         stopTimer();
@@ -294,7 +308,6 @@ function App() {
         }}>
           Status: <span style={{ color: '#1e90ff' }}>{status}</span>
         </div>
-
         <div style={{
           background: '#f1f3f5',
           padding: '8px 22px',
