@@ -15,6 +15,7 @@ function App() {
   const [blinkDetected, setBlinkDetected] = useState(false);
   const [time, setTime] = useState(0);
   const [countdown, setCountdown] = useState(0);
+  const [videoVisible, setVideoVisible] = useState(false);
 
   // Calculate Eye Aspect Ratio (EAR) for blink detection
   const calculateEAR = (landmarks, eyeIndices) => {
@@ -74,7 +75,7 @@ function App() {
     if (img) ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
   };
 
-  // Game timer functions
+  // Game timer
   const startTimer = () => {
     setTime(0);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -90,26 +91,35 @@ function App() {
     }
   };
 
-  // Start MediaPipe FaceMesh Camera and feed frames to it
-  const startCamera = async () => {
+  // Start webcam video stream immediately and show video
+  const startWebcamStream = async () => {
+    try {
+      if (!videoRef.current.srcObject) {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoRef.current.srcObject = stream;
+      }
+      setVideoVisible(true);
+    } catch (error) {
+      setStatus('Error accessing webcam: ' + error.message);
+    }
+  };
+
+  // Start MediaPipe Camera processing after countdown
+  const startMediaPipeCamera = () => {
     try {
       if (cameraRef.current) {
         cameraRef.current.start();
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      videoRef.current.srcObject = stream;
-
       cameraRef.current = new window.Camera(videoRef.current, {
         onFrame: async () => await faceMeshRef.current.send({ image: videoRef.current }),
         width: 640,
         height: 480,
       });
-
       cameraRef.current.start();
     } catch (error) {
-      setStatus('Error accessing webcam: ' + error.message);
+      setStatus('Error starting MediaPipe Camera: ' + error.message);
     }
   };
 
@@ -119,12 +129,13 @@ function App() {
       cameraRef.current.stop();
     }
     if (videoRef.current?.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
       videoRef.current.srcObject = null;
     }
+    setVideoVisible(false);
   };
 
-  // Initialize MediaPipe FaceMesh once on mount
+  // Initialize FaceMesh once on mount
   useEffect(() => {
     faceMeshRef.current = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
@@ -147,7 +158,7 @@ function App() {
     };
   }, []);
 
-  // Countdown before game starts
+  // Countdown timer before game starts, starts MediaPipe after countdown
   const startCountdown = () => {
     setCountdown(3);
 
@@ -160,16 +171,18 @@ function App() {
         clearInterval(interval);
         setCountdown(0);
         setStatus('Starting game... Keep your eyes open!');
-        startCamera();
+        startMediaPipeCamera();
         startTimer();
       }
     }, 1000);
   };
 
-  // Start game handler with countdown
-  const startGame = () => {
+  // Start game handler - start webcam then countdown
+  const startGame = async () => {
     setBlinkDetected(false);
     setTime(0);
+    setStatus('Getting webcam ready...');
+    await startWebcamStream();
     startCountdown();
   };
 
@@ -188,17 +201,18 @@ function App() {
       <h1>Staring Contest Game</h1>
 
       <div style={{ position: 'relative', width: 640, height: 480 }}>
-        {/* Hide video (opacity 0) but keep it active as source */}
+        {/* Video element hidden but active as source */}
         <video
           ref={videoRef}
-          style={{ position: 'absolute', top: 0, left: 0, width: 640, height: 480, opacity: 0 }}
+          style={{ position: 'absolute', top: 0, left: 0, width: 640, height: 480, opacity: videoVisible ? 1 : 0 }}
           playsInline
           muted
           width="640"
           height="480"
+          autoPlay
         />
 
-        {/* Canvas overlays the video and shows visuals */}
+        {/* Canvas overlay */}
         <canvas
           ref={canvasRef}
           width="640"
@@ -226,6 +240,7 @@ function App() {
               color: 'red',
               pointerEvents: 'none',
               userSelect: 'none',
+              textShadow: '2px 2px 4px black',
             }}
           >
             {countdown}
