@@ -5,43 +5,47 @@
 
 
 ## Basic Details
-### Team Name: [Name]
+### Team Name: Challengers
 
 
 ### Team Members
-- Team Lead: [Name] - [College]
-- Member 2: [Name] - [College]
-- Member 3: [Name] - [College]
+- Team Lead: Sreyas P - LBS College of Engineering
+- Member 2: Muhammad Shazwan - LBS College of Engineering
 
 ### Project Description
-[2-3 lines about what your project does]
+The Staring Contest Game is a fun React web app that challenges you to keep your eyes open—blink, and you lose! When you blink, a sound plays and a Rick Astley video hijacks your screen. Wave an open palm ("stop sign") at your webcam to escape the Rickroll and restart the contest.
+
 
 ### The Problem (that doesn't exist)
-[What ridiculous problem are you solving?]
+We’re tackling the extremely serious, totally-not-silly problem of seeing how long you can resist blinking at your webcam—because clearly, the world needs a high-stakes digital staring contest! And if you lose, well... you deserve to get Rickrolled until you surrender with the international stop hand sign.
 
 ### The Solution (that nobody asked for)
-[How are you solving it? Keep it fun!]
+We’re solving it with a mix of tech wizardry, trickery, and a bit of internet mischief! Your webcam and AI keep a laser-eye on your blinks, a countdown gets your adrenaline pumping, and if you fail, you’re rewarded with an epic Rickroll—right in your browser. To escape, just flash your best “stop” hand sign like you’re signaling an international time-out to your computer. It’s a goofy combo of face tracking, hand gesture AI, and pure meme energy!
 
 ## Technical Details
 ### Technologies/Components Used
 For Software:
-- [Languages used]
-- [Frameworks used]
-- [Libraries used]
-- [Tools used]
-
-For Hardware:
-- [List main components]
-- [List specifications]
-- [List tools required]
+- JavaScript 
+- React.js for building the user interface and managing application state.
+- MediaPipe Face Mesh (via CDN) for real-time facial landmark detection and blink detection.
+- MediaPipe Hands (via CDN) for hand landmark detection and gesture recognition.
+- MediaPipe Camera Utils (via CDN) to facilitate webcam video capture and frame processing.
+- Browser Web APIs: MediaDevices API for webcam access and Audio API for playing sound effects.
+- Node.js and npm for package management and development server.
+- React development tools and browser developer tools for debugging.
+- CDN hosting of MediaPipe libraries for efficient, browser-based AI processing.
+- Video and audio assets (rick.mp4, lose.mp3) hosted locally in the public folder.
+- Online hosting platform (such as Render) for deployed version at https://staring-contest.onrender.com.
 
 ### Implementation
 For Software:
 # Installation
-[commands]
+git clone https://github.com/psreyas09/staring-contest
+rm -rf node_modules package-lock.json
+npm install
 
 # Run
-[commands]
+npm start
 
 ### Project Documentation
 For Software:
