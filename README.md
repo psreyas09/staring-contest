@@ -63,7 +63,7 @@ For Software:
 
 ### Project Demo
 # Video
-https://github.com/psreyas09/staring-contest/raw/master/files/video.mp4
+![video](https://github.com/psreyas09/staring-contest/raw/master/files/video.mp4)
 *Explain what the video demonstrates*
 
 # Additional Demos
