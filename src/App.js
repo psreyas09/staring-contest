@@ -7,6 +7,11 @@ function App() {
   const faceMeshRef = useRef(null);
   const cameraRef = useRef(null);
   const timerRef = useRef(null);
+
+  const handVideoRef = useRef(null);
+  const handsRef = useRef(null);
+  const handCameraRef = useRef(null);
+
   const loseAudioRef = useRef(null);
 
   const [status, setStatus] = useState('Click Start to begin the staring contest');
@@ -16,12 +21,15 @@ function App() {
   const [videoVisible, setVideoVisible] = useState(false);
 
   const [showRickVideo, setShowRickVideo] = useState(false);
-  const [showHandSign, setShowHandSign] = useState(false);
+  const [showHandStopMessage, setShowHandStopMessage] = useState(false);
+  const [stopGestureDetected, setStopGestureDetected] = useState(false);
 
+  // Load lose sound effect
   useEffect(() => {
     loseAudioRef.current = new window.Audio(process.env.PUBLIC_URL + '/lose.mp3');
   }, []);
 
+  // Calculate Eye Aspect Ratio (EAR) for blink detection
   const calculateEAR = (landmarks, eyeIndices) => {
     const dist = (i1, i2) => {
       const dx = landmarks[i1].x - landmarks[i2].x;
@@ -34,13 +42,16 @@ function App() {
     return (A + B) / (2.0 * C);
   };
 
-  const onResults = (results) => {
-    if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
-      drawResults(null);
-      return;
-    }
+  // Blink detection callback
+  const onFaceMeshResults = (results) => {
     const ctx = canvasRef.current.getContext('2d');
     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+    if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      return;
+    }
+
     ctx.drawImage(results.image, 0, 0, canvasRef.current.width, canvasRef.current.height);
     const landmarks = results.multiFaceLandmarks[0];
     const leftEyeIndices = [33, 160, 158, 133, 153, 144];
@@ -50,55 +61,67 @@ function App() {
     const ear = (leftEAR + rightEAR) / 2;
     const BLINK_THRESHOLD = 0.25;
 
-    if (ear < BLINK_THRESHOLD) {
-      if (!blinkDetected) {
-        if (loseAudioRef.current) {
-          loseAudioRef.current.currentTime = 0;
-          loseAudioRef.current.play();
+    if (countdown === 0 && !blinkDetected && ear < BLINK_THRESHOLD) {
+      if (loseAudioRef.current) {
+        loseAudioRef.current.currentTime = 0;
+        loseAudioRef.current.play();
+      }
+      setBlinkDetected(true);
+      setStatus('Blink detected! You lose!');
+      stopTimer();
+      stopMediaPipeCamera();
+
+      setShowRickVideo(true);
+      setShowHandStopMessage(true);
+      setStopGestureDetected(false);
+
+      startHandGestureDetection();
+    }
+  };
+
+  // Hand gesture detection helper: open palm with fingers extended (simple heuristic)
+  const isStopHandGesture = (handedness, landmarks) => {
+    if (landmarks.length !== 21) return false;
+
+    function isFingerExtended(tipIdx, pipIdx) {
+      return landmarks[tipIdx].y < landmarks[pipIdx].y;
+    }
+
+    const fingersExtended =
+      isFingerExtended(8, 6) &&
+      isFingerExtended(12, 10) &&
+      isFingerExtended(16, 14) &&
+      isFingerExtended(20, 18);
+
+    // Thumb heuristic (adjust or remove if unreliable)
+    const thumbExtended = landmarks[4].x < landmarks[3].x;
+
+    return fingersExtended && thumbExtended;
+  };
+
+  // Hand gesture detection callback
+  const onHandsResults = (results) => {
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+      for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+        const landmarks = results.multiHandLandmarks[i];
+        const handedness = results.multiHandedness[i]?.label;
+
+        if (isStopHandGesture(handedness, landmarks)) {
+          setStopGestureDetected(true);
+          setShowRickVideo(false);
+          setShowHandStopMessage(false);
+
+          setBlinkDetected(false);
+          setStatus('Stop sign detected. You can restart the game now.');
+          stopHandGestureDetection();
+          return;
         }
-        setBlinkDetected(true);
-        setStatus('Blink detected! You lose!');
-        stopTimer();
-        stopCamera();
-        setShowRickVideo(true);
-        setShowHandSign(false);
       }
-    } else {
-      if (blinkDetected) setBlinkDetected(false);
     }
+    setStopGestureDetected(false);
   };
 
-  const drawResults = (img) => {
-    const ctx = canvasRef.current.getContext('2d');
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    if (img) ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
-  };
-
-  const startTimer = () => {
-    setTime(0);
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
-  };
-
-  const stopTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  const startWebcamStream = async () => {
-    try {
-      if (!videoRef.current.srcObject) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        videoRef.current.srcObject = stream;
-      }
-      setVideoVisible(true);
-    } catch (error) {
-      setStatus('Error accessing webcam: ' + error.message);
-    }
-  };
-
+  // FaceMesh camera start and stop
   const startMediaPipeCamera = () => {
     try {
       if (cameraRef.current) {
@@ -116,8 +139,75 @@ function App() {
     }
   };
 
-  const stopCamera = () => {
-    if (cameraRef.current) cameraRef.current.stop();
+  const stopMediaPipeCamera = () => {
+    if (cameraRef.current) {
+      cameraRef.current.stop();
+      cameraRef.current = null;
+    }
+  };
+
+  // Hand gesture camera start and stop
+  const startHandGestureDetection = () => {
+    if (handCameraRef.current) {
+      handCameraRef.current.start();
+      return;
+    }
+    if (!handVideoRef.current || !handsRef.current) return;
+
+    handCameraRef.current = new window.Camera(handVideoRef.current, {
+      onFrame: async () => {
+        if (handsRef.current && handVideoRef.current) {
+          await handsRef.current.send({ image: handVideoRef.current });
+        }
+      },
+      width: 640,
+      height: 480,
+    });
+    handCameraRef.current.start();
+  };
+
+  const stopHandGestureDetection = () => {
+    if (handCameraRef.current) {
+      handCameraRef.current.stop();
+      handCameraRef.current = null;
+    }
+  };
+
+  // Clear canvas helper
+  const drawResults = (img) => {
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    if (img) ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
+  };
+
+  // Timer start/stop
+  const startTimer = () => {
+    setTime(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
+  };
+
+  const stopTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  // Webcam start/stop
+  const startWebcamStream = async () => {
+    try {
+      if (!videoRef.current.srcObject) {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        videoRef.current.srcObject = stream;
+      }
+      setVideoVisible(true);
+    } catch (error) {
+      setStatus('Error accessing webcam: ' + error.message);
+    }
+  };
+
+  const stopWebcamStream = () => {
     if (videoRef.current?.srcObject) {
       videoRef.current.srcObject.getTracks().forEach(t => t.stop());
       videoRef.current.srcObject = null;
@@ -125,6 +215,7 @@ function App() {
     setVideoVisible(false);
   };
 
+  // On mount init FaceMesh and Hands
   useEffect(() => {
     faceMeshRef.current = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
@@ -135,15 +226,34 @@ function App() {
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5,
     });
-    faceMeshRef.current.onResults(onResults);
+    faceMeshRef.current.onResults(onFaceMeshResults);
+
+    handsRef.current = new window.Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    });
+    handsRef.current.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7,
+    });
+    handsRef.current.onResults(onHandsResults);
+
     return () => {
       stopTimer();
-      stopCamera();
+      stopMediaPipeCamera();
+      stopHandGestureDetection();
+      stopWebcamStream();
       faceMeshRef.current?.close();
       faceMeshRef.current = null;
+      if (handsRef.current) {
+        handsRef.current.close();
+        handsRef.current = null;
+      }
     };
   }, []);
 
+  // Countdown before game start
   const startCountdown = () => {
     setCountdown(3);
     let counter = 3;
@@ -160,25 +270,31 @@ function App() {
     }, 1000);
   };
 
+  // Start game
   const startGame = async () => {
     setBlinkDetected(false);
-    setTime(0);
+    setStopGestureDetected(false);
     setStatus('Getting webcam ready...');
     setShowRickVideo(false);
-    setShowHandSign(false);
+    setShowHandStopMessage(false);
+    setTime(0);
     await startWebcamStream();
     startCountdown();
   };
 
+  // Restart game
   const restartGame = () => {
     stopTimer();
-    stopCamera();
+    stopMediaPipeCamera();
+    stopHandGestureDetection();
+    stopWebcamStream();
     setStatus('Click Start to begin the staring contest');
     setBlinkDetected(false);
     setTime(0);
     setCountdown(0);
     setShowRickVideo(false);
-    setShowHandSign(false);
+    setShowHandStopMessage(false);
+    setStopGestureDetected(false);
   };
 
   return (
@@ -193,7 +309,8 @@ function App() {
       color: '#333',
       textAlign: 'center',
       position: 'relative',
-      minHeight: "100vh"
+      minHeight: '100vh',
+      overflow: 'hidden',
     }}>
       <h1 style={{ fontWeight: '700', marginBottom: 20 }}>👀 Staring Contest Game</h1>
 
@@ -329,90 +446,52 @@ function App() {
         </div>
       </div>
 
-      {/* Rick video overlay */}
+      {/* Rick video fullscreen loop overlay with message */}
       {showRickVideo && (
         <div style={{
           position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.85)',
+          inset: 0,
+          backgroundColor: 'black',
+          zIndex: 9999,
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 9999,
           flexDirection: 'column',
         }}>
           <video
             src={`${process.env.PUBLIC_URL}/rick.mp4`}
+            style={{ width: '100vw', height: '100vh', objectFit: 'cover' }}
             autoPlay
-            controls
-            style={{ maxWidth: '90%', maxHeight: '80%', borderRadius: 20, boxShadow: '0 0 20px rgba(255,255,255,0.6)' }}
-            onEnded={() => {
-              setShowRickVideo(false);
-              setShowHandSign(true);
-            }}
+            loop
+            playsInline
+            controls={false}
+            muted={false}
           />
-          <button
-            onClick={() => {
-              setShowRickVideo(false);
-              setShowHandSign(true);
-            }}
-            style={{
-              marginTop: 20,
-              padding: '8px 20px',
-              fontSize: 16,
-              cursor: 'pointer',
-              borderRadius: 10,
-              border: 'none',
-              backgroundColor: '#007bff',
-              color: 'white',
-            }}
-          >
-            Skip Video
-          </button>
+          <div style={{
+            position: 'absolute',
+            top: 20,
+            width: '100%',
+            color: 'white',
+            fontSize: 24,
+            textAlign: 'center',
+            fontWeight: 'bold',
+            userSelect: 'none',
+            textShadow: '0 0 10px black',
+            pointerEvents: 'none',
+          }}>
+            Stop hand sign to stop
+          </div>
+          {/* Hidden webcam video for hand detection */}
+          <video
+            ref={handVideoRef}
+            style={{ display: 'none' }}
+            playsInline
+            muted
+            autoPlay
+          />
         </div>
       )}
 
-      {/* Hand stop sign overlay */}
-      {showHandSign && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.85)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 9999,
-          flexDirection: 'column',
-          color: 'white',
-          fontSize: 48,
-          fontWeight: 'bold',
-          userSelect: 'none',
-        }}>
-          <img
-            src={`${process.env.PUBLIC_URL}/hand_stop_sign.png`}
-            alt="Stop Sign Hand"
-            style={{ maxWidth: '300px', maxHeight: '300px', marginBottom: 20 }}
-          />
-          <div>Stop!</div>
-          <button
-            onClick={() => {
-              setShowHandSign(false);
-            }}
-            style={{
-              marginTop: 30,
-              padding: '10px 20px',
-              fontSize: 18,
-              cursor: 'pointer',
-              borderRadius: 12,
-              border: 'none',
-              backgroundColor: '#ff4757',
-              color: 'white',
-            }}
-          >
-            Close
-          </button>
-        </div>
-      )}
     </div>
   );
 }
