@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FaceMesh } from '@mediapipe/face_mesh';
 
-// The Camera class is loaded globally via CDN, no import here
+// Camera class loaded globally via CDN in public/index.html:
+// <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
 function App() {
   const videoRef = useRef(null);
@@ -13,6 +14,7 @@ function App() {
   const [status, setStatus] = useState('Click Start to begin the staring contest');
   const [blinkDetected, setBlinkDetected] = useState(false);
   const [time, setTime] = useState(0);
+  const [countdown, setCountdown] = useState(0);
 
   // Calculate Eye Aspect Ratio (EAR) for blink detection
   const calculateEAR = (landmarks, eyeIndices) => {
@@ -29,7 +31,7 @@ function App() {
     return (A + B) / (2.0 * C);
   };
 
-  // Callback on results from MediaPipe FaceMesh
+  // MediaPipe FaceMesh results callback
   const onResults = (results) => {
     if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
       drawResults(null);
@@ -65,14 +67,14 @@ function App() {
     }
   };
 
-  // Draw fallback frame if no face is detected
+  // Draw fallback if no face detected
   const drawResults = (img) => {
     const ctx = canvasRef.current.getContext('2d');
     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     if (img) ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
   };
 
-  // Timer to track how long the player keeps eyes open
+  // Game timer functions
   const startTimer = () => {
     setTime(0);
     if (timerRef.current) clearInterval(timerRef.current);
@@ -88,7 +90,7 @@ function App() {
     }
   };
 
-  // Start the camera and feed frames to MediaPipe FaceMesh
+  // Start MediaPipe FaceMesh Camera and feed frames to it
   const startCamera = async () => {
     try {
       if (cameraRef.current) {
@@ -104,13 +106,14 @@ function App() {
         width: 640,
         height: 480,
       });
+
       cameraRef.current.start();
     } catch (error) {
       setStatus('Error accessing webcam: ' + error.message);
     }
   };
 
-  // Stop camera and associated streams
+  // Stop camera and video streams
   const stopCamera = () => {
     if (cameraRef.current) {
       cameraRef.current.stop();
@@ -121,7 +124,7 @@ function App() {
     }
   };
 
-  // Initialize FaceMesh once on component mount
+  // Initialize MediaPipe FaceMesh once on mount
   useEffect(() => {
     faceMeshRef.current = new FaceMesh({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
@@ -144,13 +147,30 @@ function App() {
     };
   }, []);
 
-  // Start game handler
+  // Countdown before game starts
+  const startCountdown = () => {
+    setCountdown(3);
+
+    let counter = 3;
+    const interval = setInterval(() => {
+      counter -= 1;
+      setCountdown(counter);
+
+      if (counter === 0) {
+        clearInterval(interval);
+        setCountdown(0);
+        setStatus('Starting game... Keep your eyes open!');
+        startCamera();
+        startTimer();
+      }
+    }, 1000);
+  };
+
+  // Start game handler with countdown
   const startGame = () => {
-    setStatus('Starting game... Keep your eyes open!');
     setBlinkDetected(false);
     setTime(0);
-    startCamera();
-    startTimer();
+    startCountdown();
   };
 
   // Restart game handler
@@ -160,32 +180,61 @@ function App() {
     setStatus('Click Start to begin the staring contest');
     setBlinkDetected(false);
     setTime(0);
+    setCountdown(0);
   };
 
   return (
-    <div style={{ textAlign: 'center', marginTop: '20px' }}>
+    <div style={{ textAlign: 'center', marginTop: '20px', position: 'relative', width: 640, marginLeft: 'auto', marginRight: 'auto' }}>
       <h1>Staring Contest Game</h1>
 
-      {/* Hidden video element for webcam */}
-      <video
-        ref={videoRef}
-        style={{ display: 'none' }}
-        playsInline
-        muted
-        width="640"
-        height="480"
-      />
+      <div style={{ position: 'relative', width: 640, height: 480 }}>
+        {/* Hide video (opacity 0) but keep it active as source */}
+        <video
+          ref={videoRef}
+          style={{ position: 'absolute', top: 0, left: 0, width: 640, height: 480, opacity: 0 }}
+          playsInline
+          muted
+          width="640"
+          height="480"
+        />
 
-      {/* Canvas element to display webcam and overlay */}
-      <canvas
-        ref={canvasRef}
-        width="640"
-        height="480"
-        style={{ border: '1px solid black' }}
-      />
+        {/* Canvas overlays the video and shows visuals */}
+        <canvas
+          ref={canvasRef}
+          width="640"
+          height="480"
+          style={{
+            border: '1px solid black',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 640,
+            height: 480,
+          }}
+        />
+
+        {/* Countdown overlay */}
+        {countdown > 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '40%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              fontSize: '96px',
+              fontWeight: 'bold',
+              color: 'red',
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+          >
+            {countdown}
+          </div>
+        )}
+      </div>
 
       <div style={{ marginTop: '20px' }}>
-        <button onClick={startGame} disabled={blinkDetected}>
+        <button onClick={startGame} disabled={blinkDetected || countdown > 0}>
           Start
         </button>
         <button onClick={restartGame} style={{ marginLeft: '10px' }}>
