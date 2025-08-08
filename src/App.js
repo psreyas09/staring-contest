@@ -1,17 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FaceMesh } from '@mediapipe/face_mesh';
 
 function App() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const faceMeshRef = useRef(null);
+  const handsRef = useRef(null);
   const cameraRef = useRef(null);
   const timerRef = useRef(null);
-
-  // For hand gesture detection
-  const handVideoRef = useRef(null);
-  const handsRef = useRef(null);
-  const handCameraRef = useRef(null);
 
   const loseAudioRef = useRef(null);
 
@@ -24,12 +19,10 @@ function App() {
   const [showRickVideo, setShowRickVideo] = useState(false);
   const [stopGestureDetected, setStopGestureDetected] = useState(false);
 
-  // Load lose sound effect
   useEffect(() => {
     loseAudioRef.current = new window.Audio(process.env.PUBLIC_URL + '/lose.mp3');
   }, []);
 
-  // ----- BLINK DETECTION -----
   const calculateEAR = (landmarks, eyeIndices) => {
     const dist = (i1, i2) => {
       const dx = landmarks[i1].x - landmarks[i2].x;
@@ -67,22 +60,17 @@ function App() {
       setBlinkDetected(true);
       setStatus('Blink detected! You lose!');
       stopTimer();
-      stopMediaPipeCamera();
 
       setShowRickVideo(true);
       setStopGestureDetected(false);
 
-      startHandGestureDetection();
+      // Hand gesture detection will continue started with the same camera below
     }
   };
 
-  // ----- HAND GESTURE DETECTION -----
-  
-  // Improved open palm/stop sign detection for both hands
   const isStopHandGesture = (handedness, landmarks) => {
     if (!landmarks || landmarks.length !== 21) return false;
 
-    // For index, middle, ring, pinky fingers: tip.y < pip.y
     function isFingerExtended(tipIdx, pipIdx) {
       return landmarks[tipIdx].y < landmarks[pipIdx].y;
     }
@@ -93,34 +81,19 @@ function App() {
       isFingerExtended(16, 14) &&
       isFingerExtended(20, 18);
 
-    // Thumb direction: different for left/right hands (facing webcam, hands up)
-    let thumbExtended = true;
-    if (handedness === 'Left') {
-      // Left hand: thumb tip left of joint (x is smaller)
-      thumbExtended = landmarks[4].x < landmarks[3].x;
-    } else if (handedness === 'Right') {
-      // Right hand: thumb tip right of joint (x is greater)
-      thumbExtended = landmarks[4].x > landmarks[3].x;
-    }
-
-    // To be robust, consider allowing stop sign with or without thumb extension:
-    // return fingersExtended;
-    return fingersExtended && thumbExtended;
+    return fingersExtended; // Open palm detection ignoring thumb for robustness
   };
 
   const onHandsResults = (results) => {
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
       for (let i = 0; i < results.multiHandLandmarks.length; i++) {
         const landmarks = results.multiHandLandmarks[i];
-        const handedness = (results.multiHandedness && results.multiHandedness[i] && results.multiHandedness[i].label) || 'Right';
-
-        if (isStopHandGesture(handedness, landmarks)) {
+        if (isStopHandGesture('Right', landmarks) || isStopHandGesture('Left', landmarks)) {
           setStopGestureDetected(true);
           setShowRickVideo(false);
 
           setBlinkDetected(false);
-          setStatus('Stop sign detected! You can restart the game now.');
-          stopHandGestureDetection();
+          setStatus('Stop sign detected. You can restart the game now.');
           return;
         }
       }
@@ -128,16 +101,40 @@ function App() {
     setStopGestureDetected(false);
   };
 
-  // ----- CAMERA / LIFECYCLE -----
-
   const startMediaPipeCamera = () => {
     try {
       if (cameraRef.current) {
         cameraRef.current.start();
         return;
       }
+
+      faceMeshRef.current = new window.FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+      });
+      faceMeshRef.current.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      faceMeshRef.current.onResults(onFaceMeshResults);
+
+      handsRef.current = new window.Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      });
+      handsRef.current.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7,
+      });
+      handsRef.current.onResults(onHandsResults);
+
       cameraRef.current = new window.Camera(videoRef.current, {
-        onFrame: async () => await faceMeshRef.current.send({ image: videoRef.current }),
+        onFrame: async () => {
+          await faceMeshRef.current.send({ image: videoRef.current });
+          await handsRef.current.send({ image: videoRef.current });
+        },
         width: 640,
         height: 480,
       });
@@ -152,55 +149,14 @@ function App() {
       cameraRef.current.stop();
       cameraRef.current = null;
     }
-  };
-
-  const startHandGestureDetection = async () => {
-    // Start or reuse hand detection webcam stream
-    if (handCameraRef.current) {
-      handCameraRef.current.start();
-      return;
+    if (faceMeshRef.current) {
+      faceMeshRef.current.close();
+      faceMeshRef.current = null;
     }
-    if (!handVideoRef.current || !handsRef.current) return;
-
-    // Prefer getting a new video stream if not already attached
-    if (!handVideoRef.current.srcObject) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        handVideoRef.current.srcObject = stream;
-      } catch (err) {
-        setStatus('Error accessing webcam for gesture detection: ' + err.message);
-        return;
-      }
+    if (handsRef.current) {
+      handsRef.current.close();
+      handsRef.current = null;
     }
-
-    handCameraRef.current = new window.Camera(handVideoRef.current, {
-      onFrame: async () => {
-        if (handsRef.current && handVideoRef.current) {
-          await handsRef.current.send({ image: handVideoRef.current });
-        }
-      },
-      width: 640,
-      height: 480,
-    });
-    handCameraRef.current.start();
-  };
-
-  const stopHandGestureDetection = () => {
-    if (handCameraRef.current) {
-      handCameraRef.current.stop();
-      handCameraRef.current = null;
-    }
-    // Stop the webcam stream for gesture detection
-    if (handVideoRef.current && handVideoRef.current.srcObject) {
-      handVideoRef.current.srcObject.getTracks().forEach(t => t.stop());
-      handVideoRef.current.srcObject = null;
-    }
-  };
-
-  const drawResults = (img) => {
-    const ctx = canvasRef.current.getContext('2d');
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    if (img) ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
   };
 
   const startTimer = () => {
@@ -236,45 +192,14 @@ function App() {
     setVideoVisible(false);
   };
 
-  // --- INIT ON MOUNT ---
   useEffect(() => {
-    faceMeshRef.current = new FaceMesh({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
-    });
-    faceMeshRef.current.setOptions({
-      maxNumFaces: 1,
-      refineLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
-    faceMeshRef.current.onResults(onFaceMeshResults);
-
-    // Use window.Hands (from CDN) for hand gesture detection
-    handsRef.current = new window.Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-    });
-    handsRef.current.setOptions({
-      maxNumHands: 2,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7,
-    });
-    handsRef.current.onResults(onHandsResults);
-
     return () => {
       stopTimer();
       stopMediaPipeCamera();
-      stopHandGestureDetection();
       stopWebcamStream();
-      faceMeshRef.current?.close();
-      faceMeshRef.current = null;
-      if (handsRef.current) handsRef.current.close();
-      handsRef.current = null;
     };
-    // eslint-disable-next-line
   }, []);
 
-  // --- COUNTDOWN & GAME START/RESTART ---
   const startCountdown = () => {
     setCountdown(3);
     let counter = 3;
@@ -304,7 +229,6 @@ function App() {
   const restartGame = () => {
     stopTimer();
     stopMediaPipeCamera();
-    stopHandGestureDetection();
     stopWebcamStream();
     setStatus('Click Start to begin the staring contest');
     setBlinkDetected(false);
@@ -313,8 +237,6 @@ function App() {
     setShowRickVideo(false);
     setStopGestureDetected(false);
   };
-
-  // --- RENDER ---
 
   return (
     <div style={{
@@ -476,6 +398,7 @@ function App() {
           justifyContent: 'center',
           alignItems: 'center',
           flexDirection: 'column',
+          pointerEvents: 'none',
         }}>
           <video
             src={`${process.env.PUBLIC_URL}/rick.mp4`}
@@ -484,6 +407,7 @@ function App() {
             loop
             playsInline
             controls={false}
+            muted={false}
           />
           <div style={{
             position: 'absolute',
@@ -499,14 +423,6 @@ function App() {
           }}>
             Stop hand sign to stop
           </div>
-          {/* Hidden webcam video for hand detection */}
-          <video
-            ref={handVideoRef}
-            style={{ display: 'none' }}
-            playsInline
-            muted
-            autoPlay
-          />
         </div>
       )}
     </div>
