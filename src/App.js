@@ -7,8 +7,6 @@ function App() {
   const faceMeshRef = useRef(null);
   const cameraRef = useRef(null);
   const timerRef = useRef(null);
-
-  // 1. Audio ref for sound effect
   const loseAudioRef = useRef(null);
 
   const [status, setStatus] = useState('Click Start to begin the staring contest');
@@ -17,7 +15,10 @@ function App() {
   const [countdown, setCountdown] = useState(0);
   const [videoVisible, setVideoVisible] = useState(false);
 
-  // 2. Load audio file on mount
+  // New states for Rick video and hand sign overlays
+  const [showRickVideo, setShowRickVideo] = useState(false);
+  const [showHandSign, setShowHandSign] = useState(false);
+
   useEffect(() => {
     loseAudioRef.current = new window.Audio(process.env.PUBLIC_URL + '/lose.mp3');
   }, []);
@@ -52,7 +53,6 @@ function App() {
 
     if (ear < BLINK_THRESHOLD) {
       if (!blinkDetected) {
-        // 3. Play lose sound effect when blink detected!
         if (loseAudioRef.current) {
           loseAudioRef.current.currentTime = 0;
           loseAudioRef.current.play();
@@ -61,6 +61,8 @@ function App() {
         setStatus('Blink detected! You lose!');
         stopTimer();
         stopCamera();
+        setShowRickVideo(true);
+        setShowHandSign(false);
       }
     } else {
       if (blinkDetected) setBlinkDetected(false);
@@ -163,6 +165,8 @@ function App() {
     setBlinkDetected(false);
     setTime(0);
     setStatus('Getting webcam ready...');
+    setShowRickVideo(false);
+    setShowHandSign(false);
     await startWebcamStream();
     startCountdown();
   };
@@ -174,6 +178,8 @@ function App() {
     setBlinkDetected(false);
     setTime(0);
     setCountdown(0);
+    setShowRickVideo(false);
+    setShowHandSign(false);
   };
 
   return (
@@ -187,6 +193,8 @@ function App() {
       borderRadius: 20,
       color: '#333',
       textAlign: 'center',
+      position: 'relative',
+      minHeight: "100vh"
     }}>
       <h1 style={{ fontWeight: '700', marginBottom: 20 }}>👀 Staring Contest Game</h1>
 
@@ -321,6 +329,74 @@ function App() {
           Time: <span style={{ color: '#1e90ff' }}>{time} s</span>
         </div>
       </div>
+
+      {/* Rick video overlay */}
+      {showRickVideo && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          flexDirection: 'column',
+        }}>
+          <video
+            src={`${process.env.PUBLIC_URL}/rick.mp4`}
+            autoPlay
+            muted
+            loop
+            style={{ maxWidth: '90%', maxHeight: '80%', borderRadius: 20, boxShadow: '0 0 20px rgba(255,255,255,0.6)' }}
+            onEnded={() => {
+              setShowRickVideo(false);
+              setShowHandSign(true);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Hand stop sign overlay */}
+      {showHandSign && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          flexDirection: 'column',
+          color: 'white',
+          fontSize: 48,
+          fontWeight: 'bold',
+          userSelect: 'none',
+        }}>
+          <img
+            src={`${process.env.PUBLIC_URL}/hand_stop_sign.png`}
+            alt="Stop Sign Hand"
+            style={{ maxWidth: '300px', maxHeight: '300px', marginBottom: 20 }}
+          />
+          <div>Stop!</div>
+          <button
+            onClick={() => {
+              setShowHandSign(false);
+            }}
+            style={{
+              marginTop: 30,
+              padding: '10px 20px',
+              fontSize: 18,
+              cursor: 'pointer',
+              borderRadius: 12,
+              border: 'none',
+              backgroundColor: '#ff4757',
+              color: 'white',
+            }}
+          >
+            Close
+          </button>
+        </div>
+      )}
     </div>
   );
 }
