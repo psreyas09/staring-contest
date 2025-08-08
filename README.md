@@ -52,28 +52,27 @@ For Software:
 
 # Screenshots (Add at least 3)
 ![Screenshot 1](https://raw.githubusercontent.com/psreyas09/staring-contest/master/files/1.png)
-*Add caption explaining what this shows*
+Countdown after pressing start button
 
 ![Screenshot 2](https://raw.githubusercontent.com/psreyas09/staring-contest/master/files/2.png)
-*Add caption explaining what this shows*
+Rick Roll After eyes blinking
 
 ![Screenshot 3](https://raw.githubusercontent.com/psreyas09/staring-contest/master/files/3.png)
-*Add caption explaining what this shows*
+Using hand to stop
 
 
 ### Project Demo
 # Video
 https://github.com/psreyas09/staring-contest/raw/master/files/video.mp4
 
-*Explain what the video demonstrates*
+Demo of running project. When eyes close user lose and rick roll plays, and using hands it is stopped.
 
 # Additional Demos
-[Add any extra demo materials/links]
+https://staring-contest.onrender.com
 
 ## Team Contributions
-- [Name 1]: [Specific contributions]
-- [Name 2]: [Specific contributions]
-- [Name 3]: [Specific contributions]
+- Sreyas P: Created backend
+- Muhammad Shazwan: Created frontend
 
 ---
 Made with ❤️ at TinkerHub Useless Projects 
