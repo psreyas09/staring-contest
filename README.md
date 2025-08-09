@@ -63,7 +63,7 @@ Using hand to stop
 
 ### Project Demo
 # Video
-https://github.com/psreyas09/staring-contest/raw/master/files/video.mp4
+https://drive.google.com/file/d/10HyWBhqBDJM_fYKyWSsNXh-8nfLj8hmj/view?usp=sharing
 
 Demo of running project. When eyes close user lose and rick roll plays, and using hands it is stopped.
 
